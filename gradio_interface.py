@@ -293,7 +293,7 @@ def reset_to_defaults():
 def initialize_engine(
     model_path: str = DEFAULT_MODEL_PATH,
     audio_tokenizer_path: str = DEFAULT_AUDIO_TOKENIZER_PATH,
-    tokenizer_path: str = None,
+    tokenizer_path: str = DEFAULT_MODEL_PATH,
     device: str = None,
     load_in_8bit: bool = False
 ):
@@ -323,8 +323,8 @@ def initialize_engine(
             logger.warning(f"Empty audio tokenizer path provided, using default: {audio_tokenizer_path}")
         
         # Handle optional tokenizer path
-        if tokenizer_path and tokenizer_path.strip() == "":
-            tokenizer_path = None
+        if not tokenizer_path or tokenizer_path.strip() == "":
+            tokenizer_path = DEFAULT_MODEL_PATH
         # Clear GPU cache before loading
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -346,7 +346,6 @@ def initialize_engine(
             audio_tokenizer_name_or_path=audio_tokenizer_path,
             tokenizer_name_or_path=tokenizer_path,
             device=device,
-            load_in_8bit=load_in_8bit,
             kv_cache_lengths=kv_cache_lengths
         )
         
@@ -440,7 +439,7 @@ def text_to_speech(
         init_result = initialize_engine(
             model_path=DEFAULT_MODEL_PATH,
             audio_tokenizer_path=DEFAULT_AUDIO_TOKENIZER_PATH,
-            tokenizer_path=None,
+            tokenizer_path=DEFAULT_MODEL_PATH,
             device=None,
             load_in_8bit=False
         )
