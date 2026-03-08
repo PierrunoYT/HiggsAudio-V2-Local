@@ -6,12 +6,12 @@ Merged from gradio_interface1.py while preserving 8-bit quantization functionali
 
 import argparse
 import base64
+import logging
 import os
 import uuid
 import json
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import gradio as gr
-from loguru import logger
 import numpy as np
 import time
 from functools import lru_cache
@@ -20,7 +20,6 @@ import torch
 import torchaudio
 import tempfile
 import gc
-import logging
 
 # Import HiggsAudio components
 from boson_multimodal.serve.serve_engine import HiggsAudioServeEngine, HiggsAudioResponse
@@ -232,13 +231,45 @@ def normalize_chinese_punctuation(text):
     chinese_to_english_punct = {
         "，": ", ", "。": ".", "：": ":", "；": ";", "？": "?", "！": "!",
         "（": "(", "）": ")", "【": "[", "】": "]", "《": "<", "》": ">",
-        """: '"', """: '"', "'": "'", "'": "'", "、": ",", "—": "-",
+        "“": '"', "”": '"', "‘": "'", "’": "'",
+        "「": '"', "」": '"', "『": '"', "』": '"', "、": ",", "—": "-",
         "…": "...", "·": ".", "「": '"', "」": '"', "『": '"', "』": '"',
     }
     
-    for zh_punct, en_punct in chinese_to_english_punct.items():
+        for zh_punct, en_punct in chinese_to_english_punct.items():
         text = text.replace(zh_punct, en_punct)
     return text
+
+def _extract_stop_strings(stop_strings: Optional[Any]) -> List[str]:
+    """Normalize stop strings into a list of non-empty strings."""
+    if stop_strings is None:
+        return DEFAULT_STOP_STRINGS.copy()
+
+    if isinstance(stop_strings, dict):
+        rows = stop_strings.get("stops", [])
+    elif isinstance(stop_strings, (list, tuple)):
+        rows = stop_strings
+    else:
+        return [str(stop_strings).strip()] if str(stop_strings).strip() else DEFAULT_STOP_STRINGS.copy()
+
+    values: List[str] = []
+    if isinstance(rows, dict):
+        rows = rows.get("data", [])
+
+    for row in rows:
+        if isinstance(row, dict):
+            raw = row.get("stops", "")
+        elif isinstance(row, (list, tuple)):
+            raw = row[0] if row else ""
+        else:
+            raw = row
+
+        if isinstance(raw, str):
+            cleaned = raw.strip()
+            if cleaned:
+                values.append(cleaned)
+
+    return values if values else DEFAULT_STOP_STRINGS.copy()
 
 def normalize_text(transcript: str):
     transcript = normalize_chinese_punctuation(transcript)
@@ -451,10 +482,7 @@ def text_to_speech(
         chatml_sample = prepare_chatml_sample(voice_preset, text, reference_audio, reference_text, system_prompt)
 
         # Convert stop strings format
-        if stop_strings is None:
-            stop_list = DEFAULT_STOP_STRINGS
-        else:
-            stop_list = [s for s in stop_strings["stops"] if s.strip()]
+        stop_list = _extract_stop_strings(stop_strings)
 
         request_id = f"tts-enhanced-{str(uuid.uuid4())}"
         logger.info(
@@ -473,7 +501,7 @@ def text_to_speech(
             top_p=top_p,
             stop_strings=stop_list,
             ras_win_len=ras_win_len if ras_win_len > 0 else None,
-            ras_win_max_num_repeat=max(ras_win_len, ras_win_max_num_repeat),
+            ras_win_max_num_repeat=ras_win_max_num_repeat,
         )
 
         generation_time = time.time() - start_time
